@@ -1,3 +1,3 @@
-module github.com/getAlby/ldk-node-go
+module github.com/getAlby/second-hub-go
 
 go 1.24
