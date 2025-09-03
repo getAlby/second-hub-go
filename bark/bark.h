@@ -418,6 +418,11 @@ void uniffi_bark_fn_method_wallet_exit_all(void* ptr, RustCallStatus *out_status
 RustBuffer uniffi_bark_fn_method_wallet_exit_status(void* ptr, RustCallStatus *out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_BARK_FN_METHOD_WALLET_LOOKUP_INVOICE
+#define UNIFFI_FFIDEF_UNIFFI_BARK_FN_METHOD_WALLET_LOOKUP_INVOICE
+RustBuffer uniffi_bark_fn_method_wallet_lookup_invoice(void* ptr, RustBuffer payment_hash, RustCallStatus *out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_BARK_FN_METHOD_WALLET_MAINTENANCE
 #define UNIFFI_FFIDEF_UNIFFI_BARK_FN_METHOD_WALLET_MAINTENANCE
 void uniffi_bark_fn_method_wallet_maintenance(void* ptr, RustCallStatus *out_status
@@ -828,6 +833,12 @@ uint16_t uniffi_bark_checksum_method_wallet_exit_all(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_BARK_CHECKSUM_METHOD_WALLET_EXIT_STATUS
 #define UNIFFI_FFIDEF_UNIFFI_BARK_CHECKSUM_METHOD_WALLET_EXIT_STATUS
 uint16_t uniffi_bark_checksum_method_wallet_exit_status(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_BARK_CHECKSUM_METHOD_WALLET_LOOKUP_INVOICE
+#define UNIFFI_FFIDEF_UNIFFI_BARK_CHECKSUM_METHOD_WALLET_LOOKUP_INVOICE
+uint16_t uniffi_bark_checksum_method_wallet_lookup_invoice(void
     
 );
 #endif

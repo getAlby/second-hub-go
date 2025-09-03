@@ -420,6 +420,15 @@ func uniffiCheckChecksums() {
 	}
 	{
 		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_bark_checksum_method_wallet_lookup_invoice()
+		})
+		if checksum != 30810 {
+			// If this happens try cleaning and rebuilding your project
+			panic("bark: uniffi_bark_checksum_method_wallet_lookup_invoice: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
 			return C.uniffi_bark_checksum_method_wallet_maintenance()
 		})
 		if checksum != 48568 {
@@ -778,6 +787,7 @@ type WalletInterface interface {
 	ClaimBolt11Payment(invoice Bolt11Invoice) error
 	ExitAll() error
 	ExitStatus() (ExitStatus, error)
+	LookupInvoice(paymentHash PaymentHash) (*LightningReceive, error)
 	Maintenance() error
 	Movements() ([]Movement, error)
 	NewAddress() (BarkAddress, error)
@@ -879,6 +889,23 @@ func (_self *Wallet) ExitStatus() (ExitStatus, error) {
 		return _uniffiDefaultValue, _uniffiErr
 	} else {
 		return FfiConverterExitStatusINSTANCE.Lift(_uniffiRV), nil
+	}
+}
+
+func (_self *Wallet) LookupInvoice(paymentHash PaymentHash) (*LightningReceive, error) {
+	_pointer := _self.ffiObject.incrementPointer("*Wallet")
+	defer _self.ffiObject.decrementPointer()
+	_uniffiRV, _uniffiErr := rustCallWithError[Error](FfiConverterError{}, func(_uniffiStatus *C.RustCallStatus) RustBufferI {
+		return GoRustBuffer{
+			inner: C.uniffi_bark_fn_method_wallet_lookup_invoice(
+				_pointer, FfiConverterTypePaymentHashINSTANCE.Lower(paymentHash), _uniffiStatus),
+		}
+	})
+	if _uniffiErr != nil {
+		var _uniffiDefaultValue *LightningReceive
+		return _uniffiDefaultValue, _uniffiErr
+	} else {
+		return FfiConverterOptionalLightningReceiveINSTANCE.Lift(_uniffiRV), nil
 	}
 }
 
@@ -1293,6 +1320,54 @@ func (_ FfiDestroyerExitStatus) Destroy(value ExitStatus) {
 	value.Destroy()
 }
 
+type LightningReceive struct {
+	PaymentHash        string
+	PaymentPreimage    string
+	Invoice            Bolt11Invoice
+	PreimageRevealedAt *uint64
+}
+
+func (r *LightningReceive) Destroy() {
+	FfiDestroyerString{}.Destroy(r.PaymentHash)
+	FfiDestroyerString{}.Destroy(r.PaymentPreimage)
+	FfiDestroyerTypeBolt11Invoice{}.Destroy(r.Invoice)
+	FfiDestroyerOptionalUint64{}.Destroy(r.PreimageRevealedAt)
+}
+
+type FfiConverterLightningReceive struct{}
+
+var FfiConverterLightningReceiveINSTANCE = FfiConverterLightningReceive{}
+
+func (c FfiConverterLightningReceive) Lift(rb RustBufferI) LightningReceive {
+	return LiftFromRustBuffer[LightningReceive](c, rb)
+}
+
+func (c FfiConverterLightningReceive) Read(reader io.Reader) LightningReceive {
+	return LightningReceive{
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterTypeBolt11InvoiceINSTANCE.Read(reader),
+		FfiConverterOptionalUint64INSTANCE.Read(reader),
+	}
+}
+
+func (c FfiConverterLightningReceive) Lower(value LightningReceive) C.RustBuffer {
+	return LowerIntoRustBuffer[LightningReceive](c, value)
+}
+
+func (c FfiConverterLightningReceive) Write(writer io.Writer, value LightningReceive) {
+	FfiConverterStringINSTANCE.Write(writer, value.PaymentHash)
+	FfiConverterStringINSTANCE.Write(writer, value.PaymentPreimage)
+	FfiConverterTypeBolt11InvoiceINSTANCE.Write(writer, value.Invoice)
+	FfiConverterOptionalUint64INSTANCE.Write(writer, value.PreimageRevealedAt)
+}
+
+type FfiDestroyerLightningReceive struct{}
+
+func (_ FfiDestroyerLightningReceive) Destroy(value LightningReceive) {
+	value.Destroy()
+}
+
 type Movement struct {
 	Id                uint32
 	Kind              MovementKind
@@ -1616,6 +1691,7 @@ var ErrErrorInvalidMnemonic = fmt.Errorf("ErrorInvalidMnemonic")
 var ErrErrorInvalidBolt11Invoice = fmt.Errorf("ErrorInvalidBolt11Invoice")
 var ErrErrorInvalidBitcoinAddress = fmt.Errorf("ErrorInvalidBitcoinAddress")
 var ErrErrorInvalidBarkAddress = fmt.Errorf("ErrorInvalidBarkAddress")
+var ErrErrorInvalidPaymentHash = fmt.Errorf("ErrorInvalidPaymentHash")
 var ErrErrorBarkFailed = fmt.Errorf("ErrorBarkFailed")
 
 // Variant structs
@@ -1771,6 +1847,25 @@ func (self ErrorInvalidBarkAddress) Is(target error) bool {
 	return target == ErrErrorInvalidBarkAddress
 }
 
+type ErrorInvalidPaymentHash struct {
+	message string
+}
+
+func NewErrorInvalidPaymentHash() *Error {
+	return &Error{err: &ErrorInvalidPaymentHash{}}
+}
+
+func (e ErrorInvalidPaymentHash) destroy() {
+}
+
+func (err ErrorInvalidPaymentHash) Error() string {
+	return fmt.Sprintf("InvalidPaymentHash: %s", err.message)
+}
+
+func (self ErrorInvalidPaymentHash) Is(target error) bool {
+	return target == ErrErrorInvalidPaymentHash
+}
+
 type ErrorBarkFailed struct {
 	message string
 }
@@ -1824,6 +1919,8 @@ func (c FfiConverterError) Read(reader io.Reader) *Error {
 	case 8:
 		return &Error{&ErrorInvalidBarkAddress{message}}
 	case 9:
+		return &Error{&ErrorInvalidPaymentHash{message}}
+	case 10:
 		return &Error{&ErrorBarkFailed{message}}
 	default:
 		panic(fmt.Sprintf("Unknown error code %d in FfiConverterError.Read()", errorID))
@@ -1849,8 +1946,10 @@ func (c FfiConverterError) Write(writer io.Writer, value *Error) {
 		writeInt32(writer, 7)
 	case *ErrorInvalidBarkAddress:
 		writeInt32(writer, 8)
-	case *ErrorBarkFailed:
+	case *ErrorInvalidPaymentHash:
 		writeInt32(writer, 9)
+	case *ErrorBarkFailed:
+		writeInt32(writer, 10)
 	default:
 		_ = variantValue
 		panic(fmt.Sprintf("invalid error value `%v` in FfiConverterError.Write", value))
@@ -1876,6 +1975,8 @@ func (_ FfiDestroyerError) Destroy(value *Error) {
 	case ErrorInvalidBitcoinAddress:
 		variantValue.destroy()
 	case ErrorInvalidBarkAddress:
+		variantValue.destroy()
+	case ErrorInvalidPaymentHash:
 		variantValue.destroy()
 	case ErrorBarkFailed:
 		variantValue.destroy()
@@ -2073,6 +2174,43 @@ type FfiDestroyerOptionalUint64 struct{}
 func (_ FfiDestroyerOptionalUint64) Destroy(value *uint64) {
 	if value != nil {
 		FfiDestroyerUint64{}.Destroy(*value)
+	}
+}
+
+type FfiConverterOptionalLightningReceive struct{}
+
+var FfiConverterOptionalLightningReceiveINSTANCE = FfiConverterOptionalLightningReceive{}
+
+func (c FfiConverterOptionalLightningReceive) Lift(rb RustBufferI) *LightningReceive {
+	return LiftFromRustBuffer[*LightningReceive](c, rb)
+}
+
+func (_ FfiConverterOptionalLightningReceive) Read(reader io.Reader) *LightningReceive {
+	if readInt8(reader) == 0 {
+		return nil
+	}
+	temp := FfiConverterLightningReceiveINSTANCE.Read(reader)
+	return &temp
+}
+
+func (c FfiConverterOptionalLightningReceive) Lower(value *LightningReceive) C.RustBuffer {
+	return LowerIntoRustBuffer[*LightningReceive](c, value)
+}
+
+func (_ FfiConverterOptionalLightningReceive) Write(writer io.Writer, value *LightningReceive) {
+	if value == nil {
+		writeInt8(writer, 0)
+	} else {
+		writeInt8(writer, 1)
+		FfiConverterLightningReceiveINSTANCE.Write(writer, *value)
+	}
+}
+
+type FfiDestroyerOptionalLightningReceive struct{}
+
+func (_ FfiDestroyerOptionalLightningReceive) Destroy(value *LightningReceive) {
+	if value != nil {
+		FfiDestroyerLightningReceive{}.Destroy(*value)
 	}
 }
 
@@ -2280,6 +2418,17 @@ type FfiConverterTypeNetwork = FfiConverterString
 type FfiDestroyerTypeNetwork = FfiDestroyerString
 
 var FfiConverterTypeNetworkINSTANCE = FfiConverterString{}
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ * It's also what we have an external type that references a custom type.
+ */
+type PaymentHash = string
+type FfiConverterTypePaymentHash = FfiConverterString
+type FfiDestroyerTypePaymentHash = FfiDestroyerString
+
+var FfiConverterTypePaymentHashINSTANCE = FfiConverterString{}
 
 /**
  * Typealias from the type name used in the UDL file to the builtin type.  This
